@@ -26,6 +26,7 @@ const ETHICS = /\b(ethic|plagiar|professional conduct|licen[cs]|intellectual pro
 const TEAM = /\b(team|group work|collaborat|pair programming)/;
 const COMMUNICATE = /\b(report|presentation|present\b|document|communicat|written communication|viva)/;
 const PROJECT = /\b(project management|cost|budget|finance|schedul|resource planning)/;
+const LIFELONG_EXPLICIT = /(self[- ]study|self[- ]learning|independent learning|lifelong|life[- ]long|continuing education)/;
 const LIFELONG = /\b(self[- ]study|self[- ]learning|recent advance|new frontier|lifelong|life[- ]long|emerging|industry trend|continuing)/;
 const PSO1 = /\b(comput|algorithm|data structure|program)/;
 const PSO2 = /\b(design|develop|build|construct|software|tool|platform|application)/;
@@ -96,8 +97,12 @@ function levelFor(po: PoDef, co: CoInput, ev: Evidence, strict = true): 0 | 1 | 
       return ev.components.some((c) => COMMUNICATE.test(c)) && has(ev.syllabus, COMMUNICATE) ? 1 : 0;
     case "PO-10":
       return has(ev.syllabus, PROJECT) ? 1 : 0;
-    case "PO-11":
-      return has(ev.syllabus, LIFELONG) ? (bloom >= 4 ? 2 : 1) : 0;
+    case "PO-11": {
+      // Life-long learning needs the syllabus or assessment to say so outright;
+      // topics merely described as recent are not evidence of it.
+      const wording = strict ? LIFELONG_EXPLICIT : LIFELONG;
+      return has(ev.syllabus, wording) ? (bloom >= 4 ? 2 : 1) : 0;
+    }
     default:
       return 0;
   }
