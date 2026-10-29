@@ -69,16 +69,18 @@ function levelFor(po: PoDef, co: CoInput, ev: Evidence): 0 | 1 | 2 | 3 {
       return designing ? cap : (Math.min(cap, 2) as 0 | 1 | 2 | 3);
     }
     case "PO-4": {
-      if (!has(text, INVESTIGATE)) return 0;
-      const cap = analysisCap(bloom);
-      return cap ? (Math.min(cap, bloom >= 4 ? 2 : 1) as 0 | 1 | 2 | 3) : 0;
+      // Investigation needs an analysis-level outcome and evidence of experiment or data work.
+      if (bloom < 4 || !has(text, INVESTIGATE)) return 0;
+      return bloom >= 5 ? 2 : 1;
     }
     case "PO-5": {
-      if (!has(text, TOOL)) return 0;
-      if (!ev.integrated && !has(statement, TOOL)) return 0;
+      // Tool use has to be real: the outcome itself applies a tool, or it is at least
+      // an Apply-level outcome in a course with laboratory work.
+      const usesTool = has(statement, TOOL);
+      if (!usesTool && !(ev.integrated && bloom >= 3 && has(ev.practical, TOOL))) return 0;
       if (bloom >= 5) return 3;
       if (bloom >= 3) return 2;
-      return 1;
+      return usesTool ? 1 : 0;
     }
     case "PO-6":
       return has(ev.syllabus, WORLD) || has(statement, WORLD) ? 1 : 0;

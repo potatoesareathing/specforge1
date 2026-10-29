@@ -273,7 +273,20 @@ export function runValidation(input: ValidationInput): Defect[] {
       defect("LABEL_OR_TITLE_MISMATCH", "spec", 8, [], `The heading "${label}" uses the wrong capitalisation for "COs".`, `Used the template heading "Achieving COs".`, "Low"),
     );
   }
-  for (const unit of units) {
+  // Marks printed in the assessment table must add up to the course total.
+  const markTokens = (spec.text.match(/\d{1,3}\s*marks/gi) ?? [])
+    .map((token) => Number(token.replace(/\D/g, "")))
+    .filter((value) => value > 0 && value !== spec.credits.marks);
+  if (spec.credits.marks !== null && markTokens.length >= 3) {
+    const markSum = markTokens.reduce((a, b) => a + b, 0);
+    if (markSum !== spec.credits.marks) {
+      out.push(
+        defect("MARKS_INCONSISTENT", "spec", 7, [], `The marks shown against the assessment components add up to ${markSum}, but Section 2 states ${spec.credits.marks} total course marks.`, `Reported the mismatch and kept the stated course total of ${spec.credits.marks}.`, "Medium"),
+      );
+    }
+  }
+
+  for (const unit of [...units, ...spec.units]) {
     if (/,\s*$/.test(unit.content)) {
       out.push(
         defect("TYPO_OR_FORMAT", blueprint ? "blueprint" : "spec", 4, [`Unit-${unit.number}`], `Unit ${unit.number} syllabus text ends with a comma instead of a full stop.`, `Closed the sentence with a full stop.`, "Low"),

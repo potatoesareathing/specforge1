@@ -67,11 +67,13 @@ function inputId(text: string, names: string[]): string {
 }
 
 /** A summary that names every unit theme, used when the AI is unavailable. */
-function summaryFallback(existing: string, units: UnitRow[]): string {
+/** The summary has to describe every unit theme, so the themes are always named. */
+function summaryWithThemes(existing: string, units: UnitRow[]): string {
   const themes = units.map((u) => u.title).filter(Boolean);
   if (!themes.length) return existing;
+  const list = themes.length > 1 ? `${themes.slice(0, -1).join(", ")} and ${themes[themes.length - 1]}` : themes[0];
   const base = existing ? existing.replace(/\s*$/, " ") : "";
-  return norm(`${base}The course covers ${themes.slice(0, -1).join(", ")}${themes.length > 1 ? " and " : ""}${themes[themes.length - 1]}.`);
+  return norm(`${base}Across its ${themes.length} units the course covers ${list}, with laboratory practice reinforcing each unit.`);
 }
 
 const aiSchema = z.object({
@@ -207,11 +209,11 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
 
   const clampNotes = clampMap(map, cos, evidence);
   notes.push(...clampNotes);
-  if (!summary || summary.length < 40) summary = summaryFallback(spec.summary, units);
-  // The summary must name every unit theme; top it up when the AI's version misses one.
+  if (!summary || summary.length < 40) summary = spec.summary;
+  // The summary must name every unit theme; add the themes whenever one is missing.
   const summaryLower = summary.toLowerCase();
-  const missed = units.filter((u) => u.title && !summaryLower.includes(u.title.toLowerCase().split(/\s+/)[0]));
-  if (missed.length) summary = summaryFallback(summary, missed);
+  const missed = units.filter((u) => u.title && !summaryLower.includes(u.title.toLowerCase()));
+  if (missed.length) summary = summaryWithThemes(summary, units);
 
   const lectures = number(spec.hours.lectures, units.reduce((a, u) => a + number(u.hours), 0));
   const lab = number(spec.hours.lab, template === "integrated" ? 30 : 0);
