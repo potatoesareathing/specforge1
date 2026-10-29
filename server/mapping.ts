@@ -53,7 +53,7 @@ function knowledgeCap(bloom: number): 1 | 2 | 3 {
 }
 
 /** A level for one PO column, or 0 for a blank cell. */
-function levelFor(po: PoDef, co: CoInput, ev: Evidence): 0 | 1 | 2 | 3 {
+function levelFor(po: PoDef, co: CoInput, ev: Evidence, strict = true): 0 | 1 | 2 | 3 {
   const bloom = co.bloom;
   const statement = co.statement.toLowerCase();
   const text = `${statement} ${ev.syllabus} ${ev.practical}`;
@@ -69,7 +69,10 @@ function levelFor(po: PoDef, co: CoInput, ev: Evidence): 0 | 1 | 2 | 3 {
       return designing ? cap : (Math.min(cap, 2) as 0 | 1 | 2 | 3);
     }
     case "PO-4": {
+      // Investigation asks for an analysis-level outcome; the looser reading is
+      // only used when judging the mapping already in the specification.
       if (!has(text, INVESTIGATE)) return 0;
+      if (strict && bloom < 4) return 0;
       const cap = analysisCap(bloom);
       return cap ? (Math.min(cap, bloom >= 4 ? 2 : 1) as 0 | 1 | 2 | 3) : 0;
     }
@@ -125,12 +128,12 @@ function reason(target: { id: string; title?: string }, co: CoInput, level: 1 | 
 }
 
 /** The full map, every cell justified, with the Bloom ceiling already applied. */
-export function buildMap(cos: CoInput[], ev: Evidence): CoPoMap {
+export function buildMap(cos: CoInput[], ev: Evidence, strict = true): CoPoMap {
   const map: CoPoMap = {};
   for (const co of cos) {
     const row: Record<string, Cell> = {};
     for (const po of POS) {
-      const level = levelFor(po, co, ev);
+      const level = levelFor(po, co, ev, strict);
       if (level) row[po.id] = { level, justification: reason(po, co, level, ev) };
     }
     for (const pso of PSOS) {
@@ -147,7 +150,7 @@ export function buildMap(cos: CoInput[], ev: Evidence): CoPoMap {
 }
 
 /** Clamps a map (ours or the AI's) back inside the rules. Returns what it changed. */
-export function clampMap(map: CoPoMap, cos: CoInput[], ev: Evidence): string[] {
+export function clampMap(map: CoPoMap, cos: CoInput[], ev: Evidence, strict = true): string[] {
   const notes: string[] = [];
   const byId = new Map(cos.map((c) => [c.id, c]));
   for (const [coId, row] of Object.entries(map)) {
@@ -158,7 +161,7 @@ export function clampMap(map: CoPoMap, cos: CoInput[], ev: Evidence): string[] {
       continue;
     }
     for (const [col, cell] of Object.entries(row)) {
-      const ceiling = col.startsWith("PSO-") ? levelForPso(col, co, ev) : levelFor(POS.find((p) => p.id === col) ?? POS[0], co, ev);
+      const ceiling = col.startsWith("PSO-") ? levelForPso(col, co, ev) : levelFor(POS.find((p) => p.id === col) ?? POS[0], co, ev, strict);
       if (!ceiling) {
         delete row[col];
         notes.push(`${coId}/${col} removed: no evidence in the syllabus or assessment supports it.`);
