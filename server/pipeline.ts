@@ -235,7 +235,8 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
   const coverage: Record<string, string[]> = {};
   for (const co of cos) {
     const names = new Set<string>([ceComponent.name, seeComponent.name]);
-    if (labComponent && template === "integrated" && co.bloom >= 3) names.add(labComponent.name);
+    // A lab course examines every outcome in the laboratory component as well.
+    if (labComponent && template === "integrated") names.add(labComponent.name);
     const strongApplied = ["PO-3", "PO-5"].some((col) => (map[co.id]?.[col]?.level ?? 0) >= 2);
     if (strongApplied && labComponent) names.add(labComponent.name);
     coverage[co.id] = [...names];
@@ -253,6 +254,7 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
     coverage,
     template,
     templateSignals: signals,
+    blueprintText,
     placeholders,
     evidence,
     clampNotes,

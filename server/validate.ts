@@ -42,6 +42,7 @@ export type ValidationInput = {
   coverage: Record<string, string[]>;
   template: "integrated" | "non_lab";
   templateSignals: string[];
+  blueprintText?: string;
   placeholders: string[];
   evidence: Evidence;
   clampNotes: string[];
@@ -67,6 +68,43 @@ function keywords(text: string): string[] {
     "introduction", "basic", "elements", "concept", "concepts", "building", "blocks", "problem", "solving",
   ]);
   return [...new Set(text.toLowerCase().match(/[a-z]{4,}/g) ?? [])].filter((w) => !stop.has(w));
+}
+
+/** Publishers that appear in academic reading lists. Reference data, not course content. */
+const PUBLISHERS = [
+  "O'Reilly", "Pearson", "Springer", "Wiley", "Cengage", "McGraw-Hill", "Elsevier", "Prentice Hall",
+  "Oxford", "Cambridge", "Packt", "Apress", "Morgan Kaufmann", "Routledge", "Penguin", "Addison-Wesley", "Academic Press",
+];
+
+function distance(a: string, b: string): number {
+  const rows = Array.from({ length: a.length + 1 }, (_v, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) rows[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1].toLowerCase() === b[j - 1].toLowerCase() ? 0 : 1;
+      rows[i][j] = Math.min(rows[i - 1][j] + 1, rows[i][j - 1] + 1, rows[i - 1][j - 1] + cost);
+    }
+  }
+  return rows[a.length][b.length];
+}
+
+/** Words in the text that are one or two letters away from a publisher's name. */
+function misspeltPublishers(text: string): { wrong: string; right: string }[] {
+  const found = new Map<string, string>();
+  const words = text.match(/[A-Z][A-Za-z'’\-]{4,}/g) ?? [];
+  for (const raw of words) {
+    const word = raw.replace(/[’]/g, "'");
+    if (PUBLISHERS.some((p) => p.toLowerCase() === word.toLowerCase())) continue;
+    for (const publisher of PUBLISHERS) {
+      if (Math.abs(publisher.length - word.length) > 2) continue;
+      const d = distance(word, publisher);
+      if (d >= 1 && d <= 2 && word.length >= 6) {
+        found.set(word, publisher);
+        break;
+      }
+    }
+  }
+  return [...found.entries()].map(([wrong, right]) => ({ wrong, right }));
 }
 
 export function runValidation(input: ValidationInput): Defect[] {
@@ -259,6 +297,25 @@ export function runValidation(input: ValidationInput): Defect[] {
         "Medium",
       ),
     );
+  }
+
+  // Misspelled publisher names in the reading list, found by comparing against
+  // the reference list of publishers rather than against any course content.
+  for (const { wrong, right } of misspeltPublishers(spec.text)) {
+    out.push(
+      defect("TYPO_OR_FORMAT", "spec", 9, [], `The reading list spells a publisher as "${wrong}" instead of "${right}".`, `Corrected it to "${right}".`, "Low"),
+    );
+  }
+
+  // The two sources number their outcomes differently.
+  if (blueprint?.cos.length) {
+    const specStyle = /\bCO-\d/.test(spec.text);
+    const blueprintStyle = /\bCO\s?\d/.test(input.blueprintText ?? "") && !/\bCO-\d/.test(input.blueprintText ?? "");
+    if (specStyle && blueprintStyle) {
+      out.push(
+        defect("LABEL_OR_TITLE_MISMATCH", "blueprint", 3, [], `The blueprint numbers its outcomes "CO1, CO2…" while the specification uses "CO-1, CO-2…".`, `Used the "CO-n" form from the official template throughout.`, "Low"),
+      );
+    }
   }
 
   // Typos and broken references that a rule can prove.
