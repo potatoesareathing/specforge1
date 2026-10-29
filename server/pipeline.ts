@@ -14,7 +14,7 @@ import {
   type UnitRow,
 } from "./extract.js";
 import { bloomFromStatement, POS, PSOS } from "./bloom.js";
-import { buildMap, clampMap, fillRemainingCells, type CoInput, type CoPoMap, type Evidence } from "./mapping.js";
+import { buildMap, clampMap, type CoInput, type CoPoMap, type Evidence } from "./mapping.js";
 import { runValidation, type Defect } from "./validate.js";
 import { outputSchema, type SpecForgeOutput } from "./output.js";
 import { renderSpec, templateComponents, templatePlaceholders, type TemplateName } from "./render.js";
@@ -68,12 +68,34 @@ function inputId(text: string, names: string[]): string {
 
 /** A summary that names every unit theme, used when the AI is unavailable. */
 /** The summary has to describe every unit theme, so the themes are always named. */
-function summaryWithThemes(existing: string, units: UnitRow[]): string {
+function summaryWithThemes(existing: string, units: UnitRow[], integrated: boolean): string {
   const themes = units.map((u) => u.title).filter(Boolean);
   if (!themes.length) return existing;
-  const list = themes.length > 1 ? `${themes.slice(0, -1).join(", ")} and ${themes[themes.length - 1]}` : themes[0];
-  const base = existing ? existing.replace(/\s*$/, " ") : "";
-  return norm(`${base}Across its ${themes.length} units the course covers ${list}, with laboratory practice reinforcing each unit.`);
+
+  // A couple of the distinctive terms of each unit, so the summary describes the
+  // syllabus rather than only listing its headings.
+  const common = new Set([
+    "computer", "computers", "computing", "course", "students", "engineering", "problems", "problem",
+    "using", "their", "other", "introduction", "concepts", "concept", "between", "example", "examples",
+    "simple", "basic", "elements", "practice", "different", "various", "relationship", "fundamental",
+  ]);
+  const described = units.map((unit) => {
+    const seen = new Set<string>();
+    // The detail of a unit sits at its end, after the general opening clause.
+    const sentences = unit.content.split(/(?<=\.)\s+/).filter(Boolean);
+    const ordered = [...sentences.slice(1), sentences[0] ?? ""].join(" ").toLowerCase();
+    const terms = (ordered.match(/[a-z][a-z-]{4,}/g) ?? [])
+      .filter((word) => !common.has(word) && !word.endsWith("ing") && !unit.title.toLowerCase().includes(word) && !seen.has(word) && seen.add(word))
+      .slice(0, 3);
+    return terms.length ? `${unit.title} (${terms.join(", ")})` : unit.title;
+  });
+
+  const lead = (existing.split(/(?<=\.)\s+/)[0] ?? existing).trim();
+  const list = described.length > 1 ? `${described.slice(0, -1).join("; ")}; and ${described[described.length - 1]}` : described[0];
+  const close = integrated
+    ? "Laboratory sessions run alongside every unit, so each outcome is practised as well as taught."
+    : "Tutorials and assignments reinforce every unit, so each outcome is practised as well as taught.";
+  return norm(`${lead} Across its ${units.length} units it covers ${list}. ${close}`);
 }
 
 const aiSchema = z.object({
@@ -209,14 +231,11 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
 
   const clampNotes = clampMap(map, cos, evidence);
   notes.push(...clampNotes);
-  // The map that the rules alone support, kept for judging the spec's own map.
-  const evidenceMap: CoPoMap = JSON.parse(JSON.stringify(map));
-  fillRemainingCells(map, cos);
   if (!summary || summary.length < 40) summary = spec.summary;
   // The summary must name every unit theme; add the themes whenever one is missing.
   const summaryLower = summary.toLowerCase();
   const missed = units.filter((u) => u.title && !summaryLower.includes(u.title.toLowerCase()));
-  if (missed.length) summary = summaryWithThemes(summary, units);
+  if (missed.length) summary = summaryWithThemes(summary, units, template === "integrated");
 
   const lectures = number(spec.hours.lectures, units.reduce((a, u) => a + number(u.hours), 0));
   const lab = number(spec.hours.lab, template === "integrated" ? 30 : 0);
@@ -256,7 +275,7 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
     blueprint,
     cos,
     units,
-    map: evidenceMap,
+    map,
     hours,
     components: components.map((c) => ({ name: c.name, weight: c.weight_percent })),
     coverage,

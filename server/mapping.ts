@@ -69,18 +69,16 @@ function levelFor(po: PoDef, co: CoInput, ev: Evidence): 0 | 1 | 2 | 3 {
       return designing ? cap : (Math.min(cap, 2) as 0 | 1 | 2 | 3);
     }
     case "PO-4": {
-      // Investigation needs an analysis-level outcome and evidence of experiment or data work.
-      if (bloom < 4 || !has(text, INVESTIGATE)) return 0;
-      return bloom >= 5 ? 2 : 1;
+      if (!has(text, INVESTIGATE)) return 0;
+      const cap = analysisCap(bloom);
+      return cap ? (Math.min(cap, bloom >= 4 ? 2 : 1) as 0 | 1 | 2 | 3) : 0;
     }
     case "PO-5": {
-      // Tool use has to be real: the outcome itself applies a tool, or it is at least
-      // an Apply-level outcome in a course with laboratory work.
-      const usesTool = has(statement, TOOL);
-      if (!usesTool && !(ev.integrated && bloom >= 3 && has(ev.practical, TOOL))) return 0;
+      if (!has(text, TOOL)) return 0;
+      if (!ev.integrated && !has(statement, TOOL)) return 0;
       if (bloom >= 5) return 3;
       if (bloom >= 3) return 2;
-      return usesTool ? 1 : 0;
+      return 1;
     }
     case "PO-6":
       return has(ev.syllabus, WORLD) || has(statement, WORLD) ? 1 : 0;
@@ -174,22 +172,4 @@ export function clampMap(map: CoPoMap, cos: CoInput[], ev: Evidence): string[] {
     }
   }
   return notes;
-}
-
-/** Columns with no evidence are still graded, so every cell is given a value:
- * a moderate contribution for the softer programme outcomes and a strong one
- * elsewhere, each marked as a judgement rather than a documented link. */
-export function fillRemainingCells(map: CoPoMap, cos: CoInput[]): void {
-  const soft = new Set(["PO-6", "PO-7", "PO-8", "PO-9", "PO-10", "PO-11"]);
-  for (const co of cos) {
-    const row = (map[co.id] ??= {});
-    for (const column of [...POS.map((p) => p.id), ...PSOS.map((p) => p.id)]) {
-      if (row[column]) continue;
-      const level = soft.has(column) ? 1 : 2;
-      row[column] = {
-        level: level as 1 | 2 | 3,
-        justification: `${WORD[level as 1 | 2 | 3]}: an L${co.bloom} outcome of this course contributes to ${column} through the syllabus and assessment, recorded as a judgement where the documents give no direct evidence.`,
-      };
-    }
-  }
 }

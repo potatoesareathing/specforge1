@@ -164,12 +164,11 @@ export function runValidation(input: ValidationInput): Defect[] {
       if (!level) continue;
       const corrected: number = map[row.co]?.[col]?.level ?? 0;
       if (!allowed.has(col) && col.startsWith("PSO-")) continue;
-      const soft = /^PO-(6|7|8|9|10|11)$/.test(col);
-      if (corrected === 0 && soft) {
+      if (corrected === 0) {
         out.push(
           defect("MAPPING_UNSUPPORTED", "spec", 5, [row.co, col], `${row.co} is mapped ${level} to ${col}, but the syllabus and assessment show no evidence for it.`, `Left ${row.co}/${col} blank in the corrected map.`, "Medium", "V9"),
         );
-      } else if (corrected > 0 && level - corrected >= 2) {
+      } else if (level > corrected) {
         out.push(
           defect("MAPPING_BLOOM_MISMATCH", "spec", 5, [row.co, col], `${row.co} is an L${bloom} outcome mapped ${level} to ${col}, which is stronger than its cognitive level supports.`, `Reduced ${row.co}/${col} to ${corrected}.`, "Medium", "V9"),
         );
