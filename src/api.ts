@@ -3,7 +3,20 @@ export type Provider = "gemini" | "openrouter" | "anthropic";
 export type LlmSettings = { provider: Provider; key: string; model: string };
 
 const STORE = "specforge.llm";
-export const DEFAULT_MODELS: Record<Provider, string> = { gemini: "gemini-2.5-flash", openrouter: "google/gemini-2.5-flash", anthropic: "claude-sonnet-5-5" };
+const ROLE_STORE = "specforge.role";
+export const ROLES = ["Author", "Reviewer", "HOD"] as const;
+export type Role = (typeof ROLES)[number];
+
+export function loadRole(): Role {
+  try {
+    const raw = localStorage.getItem(ROLE_STORE);
+    const found = ROLES.find((r) => r === raw);
+    if (found) return found;
+  } catch { /* storage can be blocked */ }
+  return "Author";
+}
+export function saveRole(role: Role) { try { localStorage.setItem(ROLE_STORE, role); } catch { /* ignore */ } }
+export const DEFAULT_MODELS: Record<Provider, string> = { gemini: "gemini-3.8-flash", openrouter: "google/gemini-3.8-flash", anthropic: "claude-sonnet-5-5" };
 
 export function loadSettings(): LlmSettings {
   try {
@@ -20,6 +33,7 @@ export async function call<T>(path: string, init: RequestInit = {}): Promise<T> 
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) };
   if (init.body && !(init.body instanceof FormData)) headers["Content-Type"] = "application/json";
   if (s.key) { headers["x-llm-provider"] = s.provider; headers["x-llm-key"] = s.key; headers["x-llm-model"] = s.model || DEFAULT_MODELS[s.provider]; }
+  headers["x-role"] = loadRole();
   const res = await fetch(`/api/v1${path}`, { ...init, headers });
   const json = await res.json().catch(() => null);
   if (!json?.success) throw new Error(json?.error?.message ?? `Request failed (${res.status})`);
