@@ -66,11 +66,10 @@ function inputId(text: string, names: string[]): string {
   return "SAMPLE";
 }
 
-/** A summary that names every unit theme, used when the AI is unavailable. */
 /** The summary has to describe every unit theme, so the themes are always named. */
-function summaryWithThemes(existing: string, units: UnitRow[], integrated: boolean): string {
+function summaryWithThemes(cos: CoInput[], units: UnitRow[], integrated: boolean): string {
   const themes = units.map((u) => u.title).filter(Boolean);
-  if (!themes.length) return existing;
+  if (!themes.length) return "";
 
   // A couple of the distinctive terms of each unit, so the summary describes the
   // syllabus rather than only listing its headings.
@@ -86,11 +85,19 @@ function summaryWithThemes(existing: string, units: UnitRow[], integrated: boole
     const ordered = [...sentences.slice(1).reverse(), sentences[0] ?? ""].join(" ").toLowerCase();
     const terms = (ordered.match(/[a-z][a-z-]{4,}/g) ?? [])
       .filter((word) => !common.has(word) && !word.endsWith("ing") && !unit.title.toLowerCase().includes(word) && !seen.has(word) && seen.add(word))
-      .slice(0, 5);
+      .slice(0, 3);
     return terms.length ? `${unit.title} (${terms.join(", ")})` : unit.title;
   });
 
-  const lead = (existing.split(/(?<=\.)\s+/)[0] ?? existing).trim();
+  // Written from the outcomes and the syllabus rather than reusing the old summary,
+  // which is the text that drifted away from the units in the first place.
+  const abilities = cos
+    .map((co) => {
+      const text = co.statement.replace(/\.$/, "").trim();
+      return text.charAt(0).toLowerCase() + text.slice(1);
+    })
+    .join("; ");
+  const lead = `The course develops the ability to ${abilities}.`;
   const list = described.length > 1 ? `${described.slice(0, -1).join("; ")}; and ${described[described.length - 1]}` : described[0];
   const close = integrated
     ? "Laboratory sessions run alongside every unit, so each outcome is practised as well as taught."
@@ -238,7 +245,7 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
   // The summary must name every unit theme; add the themes whenever one is missing.
   const summaryLower = summary.toLowerCase();
   const missed = units.filter((u) => u.title && !summaryLower.includes(u.title.toLowerCase()));
-  if (missed.length) summary = summaryWithThemes(summary, units, template === "integrated");
+  if (missed.length) summary = summaryWithThemes(cos, units, template === "integrated");
 
   const lectures = number(spec.hours.lectures, units.reduce((a, u) => a + number(u.hours), 0));
   const lab = number(spec.hours.lab, template === "integrated" ? 30 : 0);
