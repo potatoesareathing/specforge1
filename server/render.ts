@@ -213,3 +213,29 @@ export function renderSpec(input: RenderInput): string {
   $("title").text(`${output.course.code} ${output.course.title}`);
   return $.html();
 }
+
+/** The assessment components the official template itself defines, with the
+ * weightage of each column. Shared weightages are split across their columns. */
+export function templateComponents(name: TemplateName): { name: string; weight_percent: number }[] {
+  const $ = cheerio.load(templateHtml(name));
+  const table = $("table").filter((_i, t) => /Focus of COs/i.test($(t).text())).first();
+  if (!table.length) return [];
+  const rows = table.find("thead tr").toArray();
+  const weightRow = rows.filter((tr) => $(tr).children("th").toArray().every((th) => /weightage|^$/i.test($(th).text().trim()) || /%/.test($(th).text()))).pop();
+  const labelRow = rows.find((tr) => {
+    const texts = $(tr).children("th").toArray().map((th) => $(th).text().replace(/\s+/g, " ").trim());
+    return texts.length >= 3 && texts.every((t) => t && !/%|marks|focus|outcome/i.test(t));
+  });
+  if (!weightRow || !labelRow) return [];
+  const weights: number[] = [];
+  for (const th of $(weightRow).children("th").toArray()) {
+    const match = $(th).text().match(/(\d{1,3}(?:\.\d+)?)\s*%/);
+    if (!match) continue;
+    const span = Number($(th).attr("colspan") ?? 1);
+    for (let i = 0; i < span; i++) weights.push(Number(match[1]) / span);
+  }
+  const labels = $(labelRow).children("th").toArray().map((th) => $(th).text().replace(/\s+/g, " ").trim());
+  return labels
+    .map((label, i) => ({ name: label, weight_percent: Math.round((weights[i] ?? 0) * 10) / 10 }))
+    .filter((c) => c.weight_percent > 0);
+}

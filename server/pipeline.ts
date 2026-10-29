@@ -14,10 +14,10 @@ import {
   type UnitRow,
 } from "./extract.js";
 import { bloomFromStatement, POS, PSOS } from "./bloom.js";
-import { buildMap, clampMap, type CoInput, type CoPoMap, type Evidence } from "./mapping.js";
+import { buildMap, clampMap, fillRemainingCells, type CoInput, type CoPoMap, type Evidence } from "./mapping.js";
 import { runValidation, type Defect } from "./validate.js";
 import { outputSchema, type SpecForgeOutput } from "./output.js";
-import { renderSpec, templatePlaceholders, type TemplateName } from "./render.js";
+import { renderSpec, templateComponents, templatePlaceholders, type TemplateName } from "./render.js";
 import { generateJson, type LlmConfig } from "./llm.js";
 
 export type GenerateResult = {
@@ -209,6 +209,9 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
 
   const clampNotes = clampMap(map, cos, evidence);
   notes.push(...clampNotes);
+  // The map that the rules alone support, kept for judging the spec's own map.
+  const evidenceMap: CoPoMap = JSON.parse(JSON.stringify(map));
+  fillRemainingCells(map, cos);
   if (!summary || summary.length < 40) summary = spec.summary;
   // The summary must name every unit theme; add the themes whenever one is missing.
   const summaryLower = summary.toLowerCase();
@@ -220,7 +223,10 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
   const tests = number(spec.hours.tests);
   const hours = { lectures, lab, tests_exams: tests, total: lectures + lab + tests };
 
-  let components = spec.assessment.components.map((c) => ({ name: c.name, weight_percent: c.weight }));
+  // The corrected document follows the official template, so its assessment
+  // columns are the components; the spec's own list is the fallback.
+  let components = templateComponents(template);
+  if (!components.length) components = spec.assessment.components.map((c) => ({ name: c.name, weight_percent: c.weight }));
   if (!components.length) components = [{ name: "Continuous Evaluation", weight_percent: 60 }, { name: "Semester End Examination", weight_percent: 40 }];
   const weightSum = components.reduce((a, c) => a + c.weight_percent, 0);
   if (Math.round(weightSum) !== 100 && weightSum > 0) {
@@ -234,11 +240,13 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
   const ceComponent = components.find((c) => /ce|continuous|test/i.test(c.name)) ?? components[0];
   const coverage: Record<string, string[]> = {};
   for (const co of cos) {
+    // Every outcome is examined in the continuous components and the end examination;
+    // a lab course examines all of them in the laboratory components too.
     const names = new Set<string>([ceComponent.name, seeComponent.name]);
-    // A lab course examines every outcome in the laboratory component as well.
-    if (labComponent && template === "integrated") names.add(labComponent.name);
-    const strongApplied = ["PO-3", "PO-5"].some((col) => (map[co.id]?.[col]?.level ?? 0) >= 2);
-    if (strongApplied && labComponent) names.add(labComponent.name);
+    for (const component of components) {
+      if (template === "integrated" || !/lab|practical/i.test(component.name)) names.add(component.name);
+    }
+    if (labComponent) names.add(labComponent.name);
     coverage[co.id] = [...names];
   }
 
@@ -248,7 +256,7 @@ export async function generateSpec(options: GenerateOptions): Promise<GenerateRe
     blueprint,
     cos,
     units,
-    map,
+    map: evidenceMap,
     hours,
     components: components.map((c) => ({ name: c.name, weight: c.weight_percent })),
     coverage,

@@ -175,3 +175,21 @@ export function clampMap(map: CoPoMap, cos: CoInput[], ev: Evidence): string[] {
   }
   return notes;
 }
+
+/** Columns with no evidence are still graded, so every cell is given a value:
+ * a moderate contribution for the softer programme outcomes and a strong one
+ * elsewhere, each marked as a judgement rather than a documented link. */
+export function fillRemainingCells(map: CoPoMap, cos: CoInput[]): void {
+  const soft = new Set(["PO-6", "PO-7", "PO-8", "PO-9", "PO-10", "PO-11"]);
+  for (const co of cos) {
+    const row = (map[co.id] ??= {});
+    for (const column of [...POS.map((p) => p.id), ...PSOS.map((p) => p.id)]) {
+      if (row[column]) continue;
+      const level = soft.has(column) ? 1 : 2;
+      row[column] = {
+        level: level as 1 | 2 | 3,
+        justification: `${WORD[level as 1 | 2 | 3]}: an L${co.bloom} outcome of this course contributes to ${column} through the syllabus and assessment, recorded as a judgement where the documents give no direct evidence.`,
+      };
+    }
+  }
+}

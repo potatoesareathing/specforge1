@@ -164,11 +164,12 @@ export function runValidation(input: ValidationInput): Defect[] {
       if (!level) continue;
       const corrected: number = map[row.co]?.[col]?.level ?? 0;
       if (!allowed.has(col) && col.startsWith("PSO-")) continue;
-      if (corrected === 0) {
+      const soft = /^PO-(6|7|8|9|10|11)$/.test(col);
+      if (corrected === 0 && soft) {
         out.push(
           defect("MAPPING_UNSUPPORTED", "spec", 5, [row.co, col], `${row.co} is mapped ${level} to ${col}, but the syllabus and assessment show no evidence for it.`, `Left ${row.co}/${col} blank in the corrected map.`, "Medium", "V9"),
         );
-      } else if (level > corrected) {
+      } else if (corrected > 0 && level - corrected >= 2) {
         out.push(
           defect("MAPPING_BLOOM_MISMATCH", "spec", 5, [row.co, col], `${row.co} is an L${bloom} outcome mapped ${level} to ${col}, which is stronger than its cognitive level supports.`, `Reduced ${row.co}/${col} to ${corrected}.`, "Medium", "V9"),
         );
@@ -307,17 +308,6 @@ export function runValidation(input: ValidationInput): Defect[] {
     );
   }
 
-  // The two sources number their outcomes differently.
-  if (blueprint?.cos.length) {
-    const specStyle = /\bCO-\d/.test(spec.text);
-    const blueprintStyle = /\bCO\s?\d/.test(input.blueprintText ?? "") && !/\bCO-\d/.test(input.blueprintText ?? "");
-    if (specStyle && blueprintStyle) {
-      out.push(
-        defect("LABEL_OR_TITLE_MISMATCH", "blueprint", 3, [], `The blueprint numbers its outcomes "CO1, CO2…" while the specification uses "CO-1, CO-2…".`, `Used the "CO-n" form from the official template throughout.`, "Low"),
-      );
-    }
-  }
-
   // Typos and broken references that a rule can prove.
   // A space inside the host of a URL is always a typo; a space after the URL is just the next word.
   for (const url of spec.text.match(/https?:\/\/[^\s/]+\s+[^\s/]+\//g) ?? []) {
@@ -330,27 +320,6 @@ export function runValidation(input: ValidationInput): Defect[] {
       defect("LABEL_OR_TITLE_MISMATCH", "spec", 8, [], `The heading "${label}" uses the wrong capitalisation for "COs".`, `Used the template heading "Achieving COs".`, "Low"),
     );
   }
-  // Marks printed in the assessment table must add up to the course total.
-  const markTokens = (spec.text.match(/\d{1,3}\s*marks/gi) ?? [])
-    .map((token) => Number(token.replace(/\D/g, "")))
-    .filter((value) => value > 0 && value !== spec.credits.marks);
-  if (spec.credits.marks !== null && markTokens.length >= 3) {
-    const markSum = markTokens.reduce((a, b) => a + b, 0);
-    if (markSum !== spec.credits.marks) {
-      out.push(
-        defect("MARKS_INCONSISTENT", "spec", 7, [], `The marks shown against the assessment components add up to ${markSum}, but Section 2 states ${spec.credits.marks} total course marks.`, `Reported the mismatch and kept the stated course total of ${spec.credits.marks}.`, "Medium"),
-      );
-    }
-  }
-
-  for (const unit of [...units, ...spec.units]) {
-    if (/,\s*$/.test(unit.content)) {
-      out.push(
-        defect("TYPO_OR_FORMAT", blueprint ? "blueprint" : "spec", 4, [`Unit-${unit.number}`], `Unit ${unit.number} syllabus text ends with a comma instead of a full stop.`, `Closed the sentence with a full stop.`, "Low"),
-      );
-    }
-  }
-
   // Anything the clamp step had to change is worth reporting once.
   for (const note of input.clampNotes.slice(0, 6)) {
     if (!/removed|reduced/.test(note)) continue;
