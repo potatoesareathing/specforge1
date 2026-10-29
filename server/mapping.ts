@@ -72,9 +72,12 @@ function levelFor(po: PoDef, co: CoInput, ev: Evidence, strict = true): 0 | 1 | 
       // Investigation asks for an analysis-level outcome; the looser reading is
       // only used when judging the mapping already in the specification.
       if (!has(text, INVESTIGATE)) return 0;
-      if (strict && bloom < 4) return 0;
-      const cap = analysisCap(bloom);
-      return cap ? (Math.min(cap, bloom >= 4 ? 2 : 1) as 0 | 1 | 2 | 3) : 0;
+      if (!strict) {
+        const cap = analysisCap(bloom);
+        return cap ? (Math.min(cap, bloom >= 4 ? 2 : 1) as 0 | 1 | 2 | 3) : 0;
+      }
+      if (bloom < 4) return 0;
+      return bloom >= 5 ? 2 : 1;
     }
     case "PO-5": {
       if (!has(text, TOOL)) return 0;
